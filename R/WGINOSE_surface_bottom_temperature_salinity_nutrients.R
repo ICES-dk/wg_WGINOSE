@@ -29,10 +29,10 @@ unzip("WGINOSE_2020.zip")
 regions <- st_read("WGINOSE_coastline_union_refactored_uten_DK.shp", query = "SELECT area_numbr AS Region FROM WGINOSE_coastline_union_refactored_uten_DK ORDER BY area_numbr") %>% st_sf()
 
 # Unzip data
-unzip("04143988.zip")  
+unzip("05033209.zip")  
 
 # Read data
-dt <- fread("04143988.txt", sep = "\t", na.strings = "NULL", stringsAsFactors = FALSE, header = TRUE, check.names = TRUE)
+dt <- fread("05033209.txt", sep = "\t", na.strings = "NULL", stringsAsFactors = FALSE, header = TRUE, check.names = TRUE)
 
 # Filter data
 dt <- dt[, list(
@@ -108,6 +108,12 @@ dts <- st_set_geometry(dts, NULL)
 
 dts <- as.data.table(dts)
 
+# Calculate bottom parameters mean and standard deviation
+dts_ <- dts[, as.list(unlist(lapply(.SD, function(x) list(mn = mean(x, na.rm = TRUE), std = sd(x, na.rm = TRUE))))), by = .(Region, Year), .SDcols=c(names(dts[, 11:(ncol(dts) - 1)]))] %>%
+  setkey(Region, Year)
+
+
+
 # Find values at bottom i.e. 20 meters from bottom or 50 meters from bottom if depth > 100 meters
 dtb <- dt[
   ifelse(
@@ -140,3 +146,17 @@ dtb <- st_join(dtb, regions, join=st_intersects, left = FALSE)
 dtb <- st_set_geometry(dtb, NULL)
 
 dtb <- as.data.table(dtb)
+
+# Calculate bottom parameters mean and standard deviation
+dtb_ <- dtb[, as.list(unlist(lapply(.SD, function(x) list(mn = mean(x, na.rm = TRUE), std=sd(x, na.rm = TRUE))))), by = .(Region, Year), .SDcols=c(names(dtb[, 11:(ncol(dtb) - 1)]))] %>%
+  setkey(Region, Year)
+
+# Add Surface and Bottom to names
+names(dts_)[-c(1:2)] <- paste("Surface", names(dts_)[-c(1:2)], sep = ".")
+names(dtb_)[-c(1:2)] <- paste("Bottom", names(dtb_)[-c(1:2)], sep = ".")
+
+# Merge surface and bottom parameters
+dtsb_ <- merge(dts_, dtb_, all = TRUE, sort = TRUE)
+
+# Write output
+fwrite(dtsb_, "OceanographySurfaceBottom.csv")
